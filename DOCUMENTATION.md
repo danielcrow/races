@@ -6,18 +6,19 @@
 3. [Setup & Deployment](#setup--deployment)
 4. [Features](#features)
 5. [Authentication](#authentication)
-6. [Multi-Tenancy](#multi-tenancy)
-7. [Age Categories](#age-categories)
-8. [Athlete Passcodes](#athlete-passcodes)
-9. [Analytics](#analytics)
-10. [Database](#database)
-11. [API Reference](#api-reference)
+6. [Age Categories](#age-categories)
+7. [Athlete Passcodes](#athlete-passcodes)
+8. [Analytics](#analytics)
+9. [Database](#database)
+10. [API Reference](#api-reference)
 
 ---
 
 ## Overview
 
-Multi-tenant race timing and results management platform built with Next.js 14, PostgreSQL, and Vercel.
+Single-tenant race timing and results management platform built with Next.js 14, PostgreSQL, and Vercel.
+
+> **Note**: This platform was recently migrated from a multi-tenant to a single-tenant architecture for simplified deployment and management. Each deployment now serves a single organization. To run multiple organizations, deploy separate instances. See [VERCEL_MULTI_TENANT_GUIDE.md](./VERCEL_MULTI_TENANT_GUIDE.md) for details.
 
 ### Tech Stack
 - **Framework**: Next.js 14 (App Router)
@@ -32,10 +33,11 @@ Multi-tenant race timing and results management platform built with Next.js 14, 
 
 ## Architecture
 
-### Multi-Tenant Model
-- **Subdomain-based**: Each club gets a subdomain (e.g., `club1.racetiming.app`)
-- **Tenant Isolation**: Data separated by `tenant_id` in all tables
-- **Middleware**: Automatic tenant detection from subdomain
+### Single-Tenant Model
+- **Simplified Deployment**: Each instance serves one organization
+- **No Subdomain Routing**: Direct domain access
+- **Isolated Databases**: Each deployment has its own database
+- **Easy Scaling**: Deploy multiple instances for multiple organizations
 
 ### Key Components
 ```
@@ -49,8 +51,7 @@ app/
 lib/
 ├── db/               # Database utilities
 ├── btf-age-categories.ts
-├── passcode.ts
-└── tenant.ts
+└── passcode.ts
 ```
 
 ---
@@ -125,7 +126,6 @@ AUTH_URL="https://yourdomain.com"
 
 ### Admin Dashboard
 - ✅ Database upload (SQLite → PostgreSQL)
-- ✅ Tenant management
 - ✅ Passcode management
 - ✅ Race filtering and search
 - ✅ Export functionality
@@ -137,41 +137,16 @@ AUTH_URL="https://yourdomain.com"
 ### NextAuth.js v5 Configuration
 - **Providers**: Credentials (email/password)
 - **Session**: JWT-based
-- **Roles**: `user`, `admin`, `tenant_admin`, `super_admin`
+- **Roles**: `admin`, `member`
 
 ### User Roles
-- **user**: View race results
-- **admin**: Upload data, manage races
-- **tenant_admin**: Manage own tenant
-- **super_admin**: Manage all tenants (desktop only)
+- **member**: View race results
+- **admin**: Upload data, manage races, manage passcodes
 
 ### Protected Routes
 - `/admin/*` - Requires authentication
 - `/athlete-profile/*` - Requires passcode
 - `/api/athletes/passcodes` - Admin only
-
----
-
-## Multi-Tenancy
-
-### Subdomain Detection
-```typescript
-// Middleware extracts tenant from subdomain
-club1.racetiming.app → tenant_id: "club1"
-localhost:3000 → tenant_id: "default"
-```
-
-### Tenant Isolation
-All database queries include `tenant_id`:
-```sql
-SELECT * FROM races WHERE tenant_id = $1
-```
-
-### Creating Tenants
-1. Visit `/register` (desktop only)
-2. Enter subdomain, name, admin email
-3. System creates tenant and admin user
-4. Admin receives credentials
 
 ---
 
@@ -315,7 +290,7 @@ verification_tokens
 
 ### Indexes
 All tables indexed on:
-- `tenant_id` (for multi-tenancy)
+- Primary keys
 - Foreign keys
 - Frequently queried columns
 
@@ -339,8 +314,6 @@ GET /api/athlete-splits/[raceId]/[athleteId]
 ```typescript
 POST /api/upload              # Upload SQLite database
 POST /api/migrate-schema      # Run schema migrations
-GET  /api/tenants             # List tenants
-POST /api/tenants             # Create tenant
 ```
 
 ### Passcode Management
@@ -375,11 +348,6 @@ GET /api/init-db              # Initialize database
 **Analytics not showing**:
 - Wait 5-10 minutes after deployment
 - Only works in production (not dev)
-
-**Tenant not detected**:
-- Check subdomain format
-- Verify middleware is running
-- Check `x-tenant` header
 
 ### Support
 - Check documentation files

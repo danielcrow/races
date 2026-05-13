@@ -2,24 +2,23 @@ import { put, head } from '@vercel/blob';
 import { writeFile, unlink } from 'fs/promises';
 import path from 'path';
 import { existsSync } from 'fs';
-import { getTenantDatabaseName } from './tenant';
+
+const DATABASE_NAME = 'RaceTiming.db';
 
 /**
- * Upload database to Vercel Blob Storage for a specific tenant
+ * Upload database to Vercel Blob Storage
  * In development without Vercel Blob token, saves to local file
  */
-export async function uploadDatabaseToBlob(buffer: Buffer, tenant: string): Promise<string> {
-  const blobName = getTenantDatabaseName(tenant);
-  
+export async function uploadDatabaseToBlob(buffer: Buffer): Promise<string> {
   // In development without valid Vercel Blob token, save locally
   if (!process.env.VERCEL && (!process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN.includes('placeholder'))) {
-    const localPath = path.join(process.cwd(), blobName);
+    const localPath = path.join(process.cwd(), DATABASE_NAME);
     await writeFile(localPath, buffer);
     return `file://${localPath}`;
   }
   
   // Use Vercel Blob in production or when token is configured
-  const blob = await put(blobName, buffer, {
+  const blob = await put(DATABASE_NAME, buffer, {
     access: 'public' as any, // Store is configured as private, this will be overridden
     addRandomSuffix: false,
   });
@@ -30,15 +29,13 @@ export async function uploadDatabaseToBlob(buffer: Buffer, tenant: string): Prom
 /**
  * Download database from Vercel Blob Storage to local temp file
  */
-export async function downloadDatabaseFromBlob(tenant: string): Promise<string> {
-  const blobName = getTenantDatabaseName(tenant);
-  
+export async function downloadDatabaseFromBlob(): Promise<string> {
   try {
     // Check if blob exists and get its URL
-    const blobInfo = await head(blobName);
+    const blobInfo = await head(DATABASE_NAME);
     
     if (!blobInfo) {
-      throw new Error(`Database not found in blob storage for tenant: ${tenant}`);
+      throw new Error('Database not found in blob storage');
     }
 
     // Fetch the blob content
@@ -49,24 +46,16 @@ export async function downloadDatabaseFromBlob(tenant: string): Promise<string> 
     
     const buffer = Buffer.from(await response.arrayBuffer());
 
-    // Save to temp location with tenant-specific name
-    const tempPath = path.join('/tmp', blobName);
+    // Save to temp location
+    const tempPath = path.join('/tmp', DATABASE_NAME);
     await writeFile(tempPath, buffer);
 
     return tempPath;
   } catch (error) {
     // If blob doesn't exist, check for local file (development)
-    const localPath = path.join(process.cwd(), blobName);
+    const localPath = path.join(process.cwd(), DATABASE_NAME);
     if (existsSync(localPath)) {
       return localPath;
-    }
-    
-    // For 'default' tenant in development, try the old filename
-    if (tenant === 'default') {
-      const oldPath = path.join(process.cwd(), 'RaceTiming.db');
-      if (existsSync(oldPath)) {
-        return oldPath;
-      }
     }
     
     throw error;
@@ -74,35 +63,26 @@ export async function downloadDatabaseFromBlob(tenant: string): Promise<string> 
 }
 
 /**
- * Get database path for a specific tenant (downloads from blob if needed)
+ * Get database path (downloads from blob if needed)
  */
-export async function getDatabasePath(tenant: string): Promise<string> {
+export async function getDatabasePath(): Promise<string> {
   // In production (Vercel), always use blob storage
   if (process.env.VERCEL) {
-    return await downloadDatabaseFromBlob(tenant);
+    return await downloadDatabaseFromBlob();
   }
   
   // In development, use local file
-  const blobName = getTenantDatabaseName(tenant);
-  const localPath = path.join(process.cwd(), blobName);
+  const localPath = path.join(process.cwd(), DATABASE_NAME);
   
   if (existsSync(localPath)) {
     return localPath;
   }
   
-  // For 'default' tenant, try the old filename
-  if (tenant === 'default') {
-    const oldPath = path.join(process.cwd(), 'RaceTiming.db');
-    if (existsSync(oldPath)) {
-      return oldPath;
-    }
-  }
-  
   // Try to download from blob as fallback
   try {
-    return await downloadDatabaseFromBlob(tenant);
+    return await downloadDatabaseFromBlob();
   } catch {
-    throw new Error(`Database not found for tenant: ${tenant}. Please upload a database file.`);
+    throw new Error('Database not found. Please upload a database file.');
   }
 }
 
@@ -120,27 +100,17 @@ export async function cleanupTempDatabase(dbPath: string): Promise<void> {
 }
 
 /**
- * Check if tenant database exists
+ * Check if database exists
  */
-export async function tenantDatabaseExists(tenant: string): Promise<boolean> {
-  const blobName = getTenantDatabaseName(tenant);
-  
+export async function databaseExists(): Promise<boolean> {
   try {
-    const blobInfo = await head(blobName);
+    const blobInfo = await head(DATABASE_NAME);
     return !!blobInfo;
   } catch {
     // In development, check local file
     if (!process.env.VERCEL) {
-      const localPath = path.join(process.cwd(), blobName);
-      if (existsSync(localPath)) {
-        return true;
-      }
-      
-      // For 'default' tenant, check old filename
-      if (tenant === 'default') {
-        const oldPath = path.join(process.cwd(), 'RaceTiming.db');
-        return existsSync(oldPath);
-      }
+      const localPath = path.join(process.cwd(), DATABASE_NAME);
+      return existsSync(localPath);
     }
     
     return false;

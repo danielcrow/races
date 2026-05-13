@@ -6,7 +6,7 @@
 - [x] BTF age categories implemented
 - [x] Athlete passcode system
 - [x] Vercel Analytics & Speed Insights
-- [x] Multi-tenant architecture
+- [x] Single-tenant architecture
 - [x] Admin dashboard
 - [x] All API endpoints
 
@@ -28,6 +28,8 @@ Ensure these are set in Vercel:
 - [ ] `AUTH_URL`
 
 ## Deployment Steps
+
+> **Note**: This is a single-tenant deployment. Each instance serves one organization. To run multiple organizations, deploy separate instances. See [VERCEL_MULTI_TENANT_GUIDE.md](./VERCEL_MULTI_TENANT_GUIDE.md) for details.
 
 ### 1. Deploy to Vercel
 ```bash
@@ -95,11 +97,11 @@ This adds:
 - [ ] Export passcodes to CSV
 - [ ] Upload new data (incremental mode)
 
-### Test Multi-Tenancy
-- [ ] Access via subdomain (e.g., `club1.yourdomain.com`)
-- [ ] Verify correct tenant data loads
-- [ ] Test on different tenant subdomain
-- [ ] Verify data isolation
+### Test Authentication
+- [ ] Login to `/admin` with admin credentials
+- [ ] Verify admin functions are accessible
+- [ ] Test logout functionality
+- [ ] Verify member role has limited access
 
 ## Troubleshooting
 
@@ -142,11 +144,20 @@ This adds:
 - Blob Storage: Automatic redundancy
 - Code: Git repository
 
+## Multiple Organizations
+
+To deploy multiple instances for different organizations:
+- See [VERCEL_MULTI_TENANT_GUIDE.md](./VERCEL_MULTI_TENANT_GUIDE.md)
+- Each organization gets its own Vercel project
+- Each has isolated database, storage, and cache
+- Simple and secure data separation
+
 ## Support
 
 ### Resources
 - README.md - Quick start
 - DOCUMENTATION.md - Complete reference
+- VERCEL_MULTI_TENANT_GUIDE.md - Multiple instance deployment
 - Vercel Dashboard - Logs and analytics
 - GitHub Issues - Bug reports
 

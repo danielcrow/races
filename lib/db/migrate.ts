@@ -33,15 +33,13 @@ interface SQLiteSplit {
 /**
  * Migrate data from SQLite database to PostgreSQL
  * @param sqlitePath Path to SQLite database file
- * @param tenantId Tenant identifier
  * @param incremental If true, only add new races; if false, clear and replace all data
  */
 export async function migrateSQLiteToPostgres(
   sqlitePath: string,
-  tenantId: string,
   incremental: boolean = false
 ): Promise<{ success: boolean; stats: any; error?: string }> {
-  console.log(`[migrate] Starting migration for tenant: ${tenantId}`);
+  console.log(`[migrate] Starting migration`);
   console.log(`[migrate] SQLite path: ${sqlitePath}`);
   
   const stats = {
@@ -61,12 +59,12 @@ export async function migrateSQLiteToPostgres(
       driver: sqlite3.Database
     });
 
-    // Clear existing tenant data only if full migration
+    // Clear existing data only if full migration
     if (!incremental) {
-      console.log(`[migrate] Full migration - clearing existing data for tenant: ${tenantId}`);
-      await clearTenantData(tenantId);
+      console.log(`[migrate] Full migration - clearing existing data`);
+      await clearTenantData('default');
     } else {
-      console.log(`[migrate] Incremental migration - keeping existing data for tenant: ${tenantId}`);
+      console.log(`[migrate] Incremental migration - keeping existing data`);
     }
 
     // Migrate in a transaction
@@ -77,16 +75,16 @@ export async function migrateSQLiteToPostgres(
       
       if (races.length > 0) {
         const raceValues = races.map((race, idx) => {
-          const offset = idx * 4;
-          return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4})`;
+          const offset = idx * 3;
+          return `($${offset + 1}, $${offset + 2}, $${offset + 3})`;
         }).join(',');
         
-        const raceParams = races.flatMap(race => [tenantId, race.ID, race.RaceName, race.RaceDate]);
+        const raceParams = races.flatMap(race => [race.ID, race.RaceName, race.RaceDate]);
         
         await client.query(
-          `INSERT INTO races (tenant_id, race_id, race_name, race_date)
+          `INSERT INTO races (race_id, race_name, race_date)
            VALUES ${raceValues}
-           ON CONFLICT (tenant_id, race_id) DO UPDATE
+           ON CONFLICT (race_id) DO UPDATE
            SET race_name = EXCLUDED.race_name, race_date = EXCLUDED.race_date`,
           raceParams
         );
@@ -192,18 +190,18 @@ export async function migrateSQLiteToPostgres(
       const consolidatedAthletes = Array.from(athleteMap.values());
       if (consolidatedAthletes.length > 0) {
         const athleteValues = consolidatedAthletes.map((_, idx) => {
-          const offset = idx * 8; // Changed from 7 to 8 to include date_of_birth
-          return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`;
+          const offset = idx * 7;
+          return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`;
         }).join(',');
         
         const athleteParams = consolidatedAthletes.flatMap(athlete => {
-          return [tenantId, athlete.athlete_id, athlete.bib_number, athlete.notes, athlete.first_name, athlete.last_name, athlete.gender, athlete.date_of_birth];
+          return [athlete.athlete_id, athlete.bib_number, athlete.notes, athlete.first_name, athlete.last_name, athlete.gender, athlete.date_of_birth];
         });
         
         await client.query(
-          `INSERT INTO athletes (tenant_id, athlete_id, bib_number, notes, first_name, last_name, gender, date_of_birth)
+          `INSERT INTO athletes (athlete_id, bib_number, notes, first_name, last_name, gender, date_of_birth)
            VALUES ${athleteValues}
-           ON CONFLICT (tenant_id, athlete_id) DO UPDATE
+           ON CONFLICT (athlete_id) DO UPDATE
            SET bib_number = EXCLUDED.bib_number, notes = EXCLUDED.notes,
                first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name,
                gender = EXCLUDED.gender, date_of_birth = EXCLUDED.date_of_birth`,
@@ -228,8 +226,8 @@ export async function migrateSQLiteToPostgres(
         const batch = splits.slice(i, i + BATCH_SIZE);
         
         const splitValues = batch.map((_, idx) => {
-          const offset = idx * 7;
-          return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`;
+          const offset = idx * 6;
+          return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`;
         }).join(',');
         
         const splitParams = batch.flatMap(split => {
@@ -244,7 +242,6 @@ export async function migrateSQLiteToPostgres(
           const consolidatedAthleteId = idMapping.get(split.AthleteID) || split.AthleteID;
           
           return [
-            tenantId,
             split.RaceID,
             consolidatedAthleteId,
             split.SplitDescription,
@@ -255,7 +252,7 @@ export async function migrateSQLiteToPostgres(
         });
         
         await client.query(
-          `INSERT INTO splits (tenant_id, race_id, athlete_id, split_description,
+          `INSERT INTO splits (race_id, athlete_id, split_description,
                                split_datetime, previous_split_datetime, split_seconds)
            VALUES ${splitValues}`,
           splitParams
@@ -268,12 +265,12 @@ export async function migrateSQLiteToPostgres(
 
       // 4. Generate Race Results (denormalized for performance)
       console.log('[migrate] Generating race results...');
-      stats.raceResults = await generateRaceResults(client, tenantId, db, idMapping);
+      stats.raceResults = await generateRaceResults(client, db, idMapping);
       console.log(`[migrate] Generated ${stats.raceResults} race results`);
 
       // 5. Generate Athlete Statistics
       console.log('[migrate] Generating athlete statistics...');
-      stats.athleteStats = await generateAthleteStats(client, tenantId);
+      stats.athleteStats = await generateAthleteStats(client);
       console.log(`[migrate] Generated ${stats.athleteStats} athlete statistics`);
     });
 
@@ -298,14 +295,12 @@ export async function migrateSQLiteToPostgres(
  */
 async function generateRaceResults(
   client: PoolClient,
-  tenantId: string,
   sqliteDb: any,
   idMapping: Map<number, number>
 ): Promise<number> {
-  // Get all races for this tenant
+  // Get all races
   const racesResult = await client.query(
-    'SELECT race_id FROM races WHERE tenant_id = $1',
-    [tenantId]
+    'SELECT race_id FROM races'
   );
 
   let totalResults = 0;
@@ -322,7 +317,7 @@ async function generateRaceResults(
           s.athlete_id,
           SUM(s.split_seconds) as total_seconds
         FROM splits s
-        WHERE s.tenant_id = $1 AND s.race_id = $2
+        WHERE s.race_id = $1
         GROUP BY s.athlete_id
       ),
       ranked_athletes AS (
@@ -344,14 +339,14 @@ async function generateRaceResults(
         a.gender,
         a.date_of_birth
       FROM ranked_athletes ra
-      JOIN athletes a ON a.tenant_id = $1 AND a.athlete_id = ra.athlete_id
+      JOIN athletes a ON a.athlete_id = ra.athlete_id
       ORDER BY ra.position
-    `, [tenantId, raceId]);
+    `, [raceId]);
     
     // Get race date for age calculation
     const raceInfo = await client.query(
-      'SELECT race_date FROM races WHERE tenant_id = $1 AND race_id = $2',
-      [tenantId, raceId]
+      'SELECT race_date FROM races WHERE race_id = $1',
+      [raceId]
     );
     const raceDate = raceInfo.rows[0]?.race_date;
 
@@ -359,9 +354,9 @@ async function generateRaceResults(
     const allSplitsResult = await client.query(`
       SELECT athlete_id, split_description, split_seconds
       FROM splits
-      WHERE tenant_id = $1 AND race_id = $2
+      WHERE race_id = $1
       ORDER BY athlete_id, split_datetime
-    `, [tenantId, raceId]);
+    `, [raceId]);
 
     // Group splits by athlete
     const splitsByAthlete = new Map<number, any[]>();
@@ -375,8 +370,8 @@ async function generateRaceResults(
     // Batch insert race results
     if (results.rows.length > 0) {
       const resultValues = results.rows.map((_, idx) => {
-        const offset = idx * 17; // Increased from 14 to 17 for new age fields
-        return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17})`;
+        const offset = idx * 16;
+        return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16})`;
       }).join(',');
 
       const resultParams = await Promise.all(results.rows.map(async (result) => {
@@ -490,7 +485,6 @@ async function generateRaceResults(
         }
 
         return [
-          tenantId,
           raceId,
           athleteId,
           result.position,
@@ -512,13 +506,13 @@ async function generateRaceResults(
 
       await client.query(`
         INSERT INTO race_results (
-          tenant_id, race_id, athlete_id, position, bib_number,
+          race_id, athlete_id, position, bib_number,
           first_name, last_name, full_name, gender, age_on_dec31,
           age_category, age_category_name, total_seconds, total_time,
           is_relay, relay_names, splits
         )
         VALUES ${resultValues}
-        ON CONFLICT (tenant_id, race_id, athlete_id) DO UPDATE
+        ON CONFLICT (race_id, athlete_id) DO UPDATE
         SET position = EXCLUDED.position, total_seconds = EXCLUDED.total_seconds,
             total_time = EXCLUDED.total_time, splits = EXCLUDED.splits,
             age_on_dec31 = EXCLUDED.age_on_dec31, age_category = EXCLUDED.age_category,
@@ -535,7 +529,7 @@ async function generateRaceResults(
 /**
  * Generate athlete statistics (optimized with single query)
  */
-async function generateAthleteStats(client: PoolClient, tenantId: string): Promise<number> {
+async function generateAthleteStats(client: PoolClient): Promise<number> {
   // Get all race results with race info in one query
   const allRacesResult = await client.query(`
     SELECT
@@ -546,10 +540,9 @@ async function generateAthleteStats(client: PoolClient, tenantId: string): Promi
       r.race_name,
       r.race_date
     FROM race_results rr
-    JOIN races r ON r.tenant_id = rr.tenant_id AND r.race_id = rr.race_id
-    WHERE rr.tenant_id = $1
+    JOIN races r ON r.race_id = rr.race_id
     ORDER BY rr.athlete_id, r.race_date DESC
-  `, [tenantId]);
+  `);
 
   // Group by athlete
   const athleteRaces = new Map<number, any[]>();
@@ -584,7 +577,6 @@ async function generateAthleteStats(client: PoolClient, tenantId: string): Promi
     }));
 
     statsToInsert.push([
-      tenantId,
       athleteId,
       totalRaces,
       bestPosition,
@@ -600,19 +592,19 @@ async function generateAthleteStats(client: PoolClient, tenantId: string): Promi
   // Batch insert all stats
   if (statsToInsert.length > 0) {
     const statsValues = statsToInsert.map((_, idx) => {
-      const offset = idx * 10;
-      return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`;
+      const offset = idx * 9;
+      return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`;
     }).join(',');
 
     const statsParams = statsToInsert.flat();
 
     await client.query(`
       INSERT INTO athlete_stats (
-        tenant_id, athlete_id, total_races, best_position, average_position,
+        athlete_id, total_races, best_position, average_position,
         best_time_seconds, average_time_seconds, first_race_date, last_race_date, races
       )
       VALUES ${statsValues}
-      ON CONFLICT (tenant_id, athlete_id) DO UPDATE
+      ON CONFLICT (athlete_id) DO UPDATE
       SET total_races = EXCLUDED.total_races, best_position = EXCLUDED.best_position,
           average_position = EXCLUDED.average_position, best_time_seconds = EXCLUDED.best_time_seconds,
           average_time_seconds = EXCLUDED.average_time_seconds, first_race_date = EXCLUDED.first_race_date,

@@ -17,13 +17,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const tenantId = request.headers.get('x-tenant');
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Tenant not found' }, { status: 400 });
-    }
-
     const result = await query(
-      `SELECT 
+      `SELECT
         athlete_id,
         first_name,
         last_name,
@@ -31,10 +26,8 @@ export async function GET(request: NextRequest) {
         date_of_birth,
         passcode,
         passcode_created_at
-       FROM athletes 
-       WHERE tenant_id = $1
-       ORDER BY last_name, first_name`,
-      [tenantId]
+       FROM athletes
+       ORDER BY last_name, first_name`
     );
 
     return NextResponse.json({ athletes: result.rows });
@@ -58,26 +51,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const tenantId = request.headers.get('x-tenant');
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Tenant not found' }, { status: 400 });
-    }
-
     // Get athletes without passcodes
     const athletesResult = await query(
-      `SELECT athlete_id FROM athletes 
-       WHERE tenant_id = $1 AND (passcode IS NULL OR passcode = '')`,
-      [tenantId]
+      `SELECT athlete_id FROM athletes
+       WHERE passcode IS NULL OR passcode = ''`
     );
 
     let generated = 0;
     for (const athlete of athletesResult.rows) {
       const passcode = generatePasscode();
       await query(
-        `UPDATE athletes 
+        `UPDATE athletes
          SET passcode = $1, passcode_created_at = CURRENT_TIMESTAMP
-         WHERE tenant_id = $2 AND athlete_id = $3`,
-        [passcode, tenantId, athlete.athlete_id]
+         WHERE athlete_id = $2`,
+        [passcode, athlete.athlete_id]
       );
       generated++;
     }

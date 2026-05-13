@@ -19,19 +19,14 @@ export async function GET(
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const tenantId = request.headers.get('x-tenant');
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Tenant not found' }, { status: 400 });
-    }
     
     const athleteId = parseInt(params.athleteId);
 
     const result = await query(
       `SELECT passcode, passcode_created_at, first_name, last_name
-       FROM athletes 
-       WHERE tenant_id = $1 AND athlete_id = $2`,
-      [tenantId, athleteId]
+       FROM athletes
+       WHERE athlete_id = $1`,
+      [athleteId]
     );
 
     if (result.rows.length === 0) {
@@ -61,11 +56,6 @@ export async function POST(
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const tenantId = request.headers.get('x-tenant');
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Tenant not found' }, { status: 400 });
-    }
     
     const athleteId = parseInt(params.athleteId);
 
@@ -73,11 +63,11 @@ export async function POST(
     const passcode = generatePasscode();
 
     const result = await query(
-      `UPDATE athletes 
+      `UPDATE athletes
        SET passcode = $1, passcode_created_at = CURRENT_TIMESTAMP
-       WHERE tenant_id = $2 AND athlete_id = $3
+       WHERE athlete_id = $2
        RETURNING passcode, passcode_created_at, first_name, last_name`,
-      [passcode, tenantId, athleteId]
+      [passcode, athleteId]
     );
 
     if (result.rows.length === 0) {

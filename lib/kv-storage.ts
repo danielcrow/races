@@ -1,5 +1,5 @@
 /**
- * Persistent user and tenant storage using Upstash Redis (Vercel KV replacement)
+ * Persistent user storage using Upstash Redis (Vercel KV replacement)
  * This replaces the in-memory storage with persistent Redis storage
  */
 
@@ -11,16 +11,7 @@ export interface User {
   email: string;
   password: string;
   name: string;
-  tenantId: string;
-  role: 'super_admin' | 'tenant_admin' | 'tenant_member';
-}
-
-export interface Tenant {
-  subdomain: string;
-  name: string;
-  status: 'active' | 'suspended';
-  createdAt: string;
-  adminEmail: string;
+  role: 'admin' | 'member';
 }
 
 // Initialize Redis client
@@ -44,37 +35,19 @@ try {
 
 // Fallback in-memory storage for development
 const memoryUsers = new Map<string, User>();
-const memoryTenants = new Map<string, Tenant>();
 
-// Initialize default tenant and admin user
+// Initialize default admin user
 async function initializeDefaults() {
-  const defaultTenant: Tenant = {
-    subdomain: 'default',
-    name: 'Default Race Club',
-    status: 'active',
-    createdAt: new Date().toISOString(),
-    adminEmail: 'admin@example.com'
-  };
-
   const defaultUser: User = {
     id: '1',
     email: 'admin@example.com',
     password: bcrypt.hashSync('admin123', 10),
-    name: 'Super Admin',
-    tenantId: 'default',
-    role: 'super_admin'
+    name: 'Admin User',
+    role: 'admin'
   };
 
   if (redis) {
     try {
-      // Check if default tenant exists
-      const existingTenant = await redis.get(`tenant:default`);
-      if (!existingTenant) {
-        await redis.set(`tenant:default`, JSON.stringify(defaultTenant));
-        await redis.sadd('tenants:all', 'default');
-        console.log('[kv-storage] Created default tenant in Redis');
-      }
-
       // Check if default user exists
       const existingUser = await redis.get(`user:admin@example.com`);
       if (!existingUser) {
@@ -87,10 +60,9 @@ async function initializeDefaults() {
     }
   } else {
     // Fallback to memory
-    if (!memoryTenants.has('default')) {
-      memoryTenants.set('default', defaultTenant);
+    if (!memoryUsers.has('admin@example.com')) {
       memoryUsers.set('admin@example.com', defaultUser);
-      console.log('[kv-storage] Initialized defaults in memory');
+      console.log('[kv-storage] Initialized default admin user in memory');
     }
   }
 }
@@ -154,65 +126,10 @@ export async function getAllUsers(): Promise<User[]> {
   return Array.from(memoryUsers.values());
 }
 
-// Tenant operations
-export async function getTenant(subdomain: string): Promise<Tenant | null> {
-  await ensureDefaults();
-  if (redis) {
-    try {
-      const data = await redis.get(`tenant:${subdomain}`);
-      return data ? (typeof data === 'string' ? JSON.parse(data) : data as Tenant) : null;
-    } catch (error) {
-      console.error('[kv-storage] Error getting tenant from Redis:', error);
-      return null;
-    }
-  }
-  return memoryTenants.get(subdomain) || null;
-}
-
-export async function setTenant(subdomain: string, tenant: Tenant): Promise<void> {
-  await ensureDefaults();
-  if (redis) {
-    try {
-      await redis.set(`tenant:${subdomain}`, JSON.stringify(tenant));
-      await redis.sadd('tenants:all', subdomain);
-    } catch (error) {
-      console.error('[kv-storage] Error setting tenant in Redis:', error);
-      throw error;
-    }
-  } else {
-    memoryTenants.set(subdomain, tenant);
-  }
-}
-
-export async function getAllTenants(): Promise<Tenant[]> {
-  await ensureDefaults();
-  if (redis) {
-    try {
-      const subdomains = await redis.smembers('tenants:all');
-      const tenants: Tenant[] = [];
-      for (const subdomain of subdomains) {
-        const tenant = await getTenant(subdomain as string);
-        if (tenant) tenants.push(tenant);
-      }
-      return tenants;
-    } catch (error) {
-      console.error('[kv-storage] Error getting all tenants from Redis:', error);
-      return [];
-    }
-  }
-  return Array.from(memoryTenants.values());
-}
-
 // Check if user exists
 export async function userExists(email: string): Promise<boolean> {
   const user = await getUser(email);
   return user !== null;
-}
-
-// Check if tenant exists
-export async function tenantExists(subdomain: string): Promise<boolean> {
-  const tenant = await getTenant(subdomain);
-  return tenant !== null;
 }
 
 // Made with Bob

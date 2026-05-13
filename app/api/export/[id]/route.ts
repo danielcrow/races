@@ -10,16 +10,6 @@ export async function GET(
   let dbPath: string | null = null;
   
   try {
-    // Get tenant from middleware-injected header
-    const tenant = request.headers.get('x-tenant');
-    
-    if (!tenant) {
-      return NextResponse.json(
-        { error: 'Tenant not found' },
-        { status: 400 }
-      );
-    }
-
     const raceId = parseInt(params.id);
     
     if (isNaN(raceId)) {
@@ -29,8 +19,8 @@ export async function GET(
       );
     }
 
-    // Get database path for this tenant (downloads from blob if needed)
-    dbPath = await getDatabasePath(tenant);
+    // Get database path (downloads from blob if needed)
+    dbPath = await getDatabasePath();
     
     const db = await open({
       filename: dbPath,

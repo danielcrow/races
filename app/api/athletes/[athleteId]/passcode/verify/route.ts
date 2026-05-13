@@ -14,11 +14,6 @@ export async function PUT(
   { params }: { params: { athleteId: string } }
 ) {
   try {
-    const tenantId = request.headers.get('x-tenant');
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Tenant not found' }, { status: 400 });
-    }
-    
     const athleteId = parseInt(params.athleteId);
     const { passcode } = await request.json();
 
@@ -30,9 +25,9 @@ export async function PUT(
 
     const result = await query(
       `SELECT passcode, first_name, last_name
-       FROM athletes 
-       WHERE tenant_id = $1 AND athlete_id = $2`,
-      [tenantId, athleteId]
+       FROM athletes
+       WHERE athlete_id = $1`,
+      [athleteId]
     );
 
     if (result.rows.length === 0) {

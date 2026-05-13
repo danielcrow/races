@@ -1,5 +1,5 @@
 -- PostgreSQL Schema for Race Timing Application
--- Optimized for performance with proper indexes and tenant isolation
+-- Optimized for performance with proper indexes
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -7,24 +7,19 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Races table
 CREATE TABLE IF NOT EXISTS races (
     id SERIAL PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL,
-    race_id INTEGER NOT NULL,
+    race_id INTEGER NOT NULL UNIQUE,
     race_name VARCHAR(500) NOT NULL,
     race_date TIMESTAMP NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(tenant_id, race_id)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_races_tenant ON races(tenant_id);
 CREATE INDEX idx_races_date ON races(race_date DESC);
-CREATE INDEX idx_races_tenant_date ON races(tenant_id, race_date DESC);
 
 -- Athletes table
 CREATE TABLE IF NOT EXISTS athletes (
     id SERIAL PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL,
-    athlete_id INTEGER NOT NULL,
+    athlete_id INTEGER NOT NULL UNIQUE,
     bib_number VARCHAR(50),
     notes TEXT,
     first_name VARCHAR(255),
@@ -35,14 +30,12 @@ CREATE TABLE IF NOT EXISTS athletes (
     passcode VARCHAR(8), -- 8-character passcode for athlete profile access
     passcode_created_at TIMESTAMP, -- Track when passcode was generated
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(tenant_id, athlete_id)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_athletes_tenant ON athletes(tenant_id);
-CREATE INDEX idx_athletes_name ON athletes(tenant_id, last_name, first_name);
-CREATE INDEX idx_athletes_full_name ON athletes(tenant_id, full_name);
-CREATE INDEX idx_athletes_bib ON athletes(tenant_id, bib_number);
+CREATE INDEX idx_athletes_name ON athletes(last_name, first_name);
+CREATE INDEX idx_athletes_full_name ON athletes(full_name);
+CREATE INDEX idx_athletes_bib ON athletes(bib_number);
 
 -- Full-text search index for athlete names
 CREATE INDEX idx_athletes_name_search ON athletes USING gin(to_tsvector('english', full_name));
@@ -50,7 +43,6 @@ CREATE INDEX idx_athletes_name_search ON athletes USING gin(to_tsvector('english
 -- Splits table (denormalized for performance)
 CREATE TABLE IF NOT EXISTS splits (
     id SERIAL PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL,
     race_id INTEGER NOT NULL,
     athlete_id INTEGER NOT NULL,
     split_description VARCHAR(255),
@@ -58,20 +50,18 @@ CREATE TABLE IF NOT EXISTS splits (
     previous_split_datetime TIMESTAMP,
     split_seconds DECIMAL(10, 3),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (tenant_id, race_id) REFERENCES races(tenant_id, race_id) ON DELETE CASCADE,
-    FOREIGN KEY (tenant_id, athlete_id) REFERENCES athletes(tenant_id, athlete_id) ON DELETE CASCADE
+    FOREIGN KEY (race_id) REFERENCES races(race_id) ON DELETE CASCADE,
+    FOREIGN KEY (athlete_id) REFERENCES athletes(athlete_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_splits_tenant ON splits(tenant_id);
-CREATE INDEX idx_splits_race ON splits(tenant_id, race_id);
-CREATE INDEX idx_splits_athlete ON splits(tenant_id, athlete_id);
-CREATE INDEX idx_splits_race_athlete ON splits(tenant_id, race_id, athlete_id);
-CREATE INDEX idx_splits_description ON splits(tenant_id, race_id, split_description);
+CREATE INDEX idx_splits_race ON splits(race_id);
+CREATE INDEX idx_splits_athlete ON splits(athlete_id);
+CREATE INDEX idx_splits_race_athlete ON splits(race_id, athlete_id);
+CREATE INDEX idx_splits_description ON splits(race_id, split_description);
 
 -- Race results materialized view for fast queries
 CREATE TABLE IF NOT EXISTS race_results (
     id SERIAL PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL,
     race_id INTEGER NOT NULL,
     athlete_id INTEGER NOT NULL,
     position INTEGER,
@@ -90,23 +80,21 @@ CREATE TABLE IF NOT EXISTS race_results (
     splits JSONB, -- Store splits as JSON for fast access
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(tenant_id, race_id, athlete_id)
+    UNIQUE(race_id, athlete_id)
 );
 
-CREATE INDEX idx_race_results_tenant ON race_results(tenant_id);
-CREATE INDEX idx_race_results_race ON race_results(tenant_id, race_id);
-CREATE INDEX idx_race_results_position ON race_results(tenant_id, race_id, position);
-CREATE INDEX idx_race_results_athlete ON race_results(tenant_id, athlete_id);
+CREATE INDEX idx_race_results_race ON race_results(race_id);
+CREATE INDEX idx_race_results_position ON race_results(race_id, position);
+CREATE INDEX idx_race_results_athlete ON race_results(athlete_id);
 CREATE INDEX idx_race_results_splits ON race_results USING gin(splits);
-CREATE INDEX idx_race_results_gender ON race_results(tenant_id, race_id, gender);
-CREATE INDEX idx_race_results_age_category ON race_results(tenant_id, race_id, age_category);
-CREATE INDEX idx_race_results_relay ON race_results(tenant_id, race_id, is_relay);
+CREATE INDEX idx_race_results_gender ON race_results(race_id, gender);
+CREATE INDEX idx_race_results_age_category ON race_results(race_id, age_category);
+CREATE INDEX idx_race_results_relay ON race_results(race_id, is_relay);
 
 -- Athlete statistics (pre-calculated for performance)
 CREATE TABLE IF NOT EXISTS athlete_stats (
     id SERIAL PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL,
-    athlete_id INTEGER NOT NULL,
+    athlete_id INTEGER NOT NULL UNIQUE,
     total_races INTEGER DEFAULT 0,
     best_position INTEGER,
     average_position DECIMAL(10, 2),
@@ -116,12 +104,10 @@ CREATE TABLE IF NOT EXISTS athlete_stats (
     last_race_date TIMESTAMP,
     races JSONB, -- Array of race summaries
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(tenant_id, athlete_id)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_athlete_stats_tenant ON athlete_stats(tenant_id);
-CREATE INDEX idx_athlete_stats_athlete ON athlete_stats(tenant_id, athlete_id);
+CREATE INDEX idx_athlete_stats_athlete ON athlete_stats(athlete_id);
 
 -- Function to update timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()

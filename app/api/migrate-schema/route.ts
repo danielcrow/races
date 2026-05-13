@@ -16,11 +16,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const tenantId = request.headers.get('x-tenant');
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Tenant not found' }, { status: 400 });
-    }
-
     console.log('[migrate-schema] Starting schema migration...');
     const migrations = [];
 

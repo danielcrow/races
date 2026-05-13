@@ -109,24 +109,6 @@ export async function initializeSchema(): Promise<void> {
 }
 
 /**
- * Clear all data for a specific tenant
- */
-export async function clearTenantData(tenantId: string): Promise<void> {
-  console.log(`[postgres] Clearing data for tenant: ${tenantId}`);
-  
-  await transaction(async (client) => {
-    // Delete in correct order to respect foreign keys
-    await client.query('DELETE FROM athlete_stats WHERE tenant_id = $1', [tenantId]);
-    await client.query('DELETE FROM race_results WHERE tenant_id = $1', [tenantId]);
-    await client.query('DELETE FROM splits WHERE tenant_id = $1', [tenantId]);
-    await client.query('DELETE FROM athletes WHERE tenant_id = $1', [tenantId]);
-    await client.query('DELETE FROM races WHERE tenant_id = $1', [tenantId]);
-  });
-  
-  console.log(`[postgres] Tenant data cleared: ${tenantId}`);
-}
-
-/**
  * Check if PostgreSQL is configured and available
  */
 export async function isPostgresAvailable(): Promise<boolean> {

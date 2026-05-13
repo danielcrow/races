@@ -11,18 +11,7 @@ export async function POST(request: Request) {
   let tempDbPath: string | null = null;
   
   try {
-    // Get tenant from middleware-injected header
-    const tenant = request.headers.get('x-tenant');
-    
-    console.log('[upload] Starting upload for tenant:', tenant);
-    
-    if (!tenant) {
-      console.error('[upload] No tenant found in request headers');
-      return NextResponse.json(
-        { error: 'Tenant not found' },
-        { status: 400 }
-      );
-    }
+    console.log('[upload] Starting upload');
 
     // Check if BLOB_READ_WRITE_TOKEN is configured
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -58,9 +47,9 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Upload to Vercel Blob Storage for this tenant
-    console.log(`[upload] Uploading database to blob storage for tenant: ${tenant}`);
-    const blobUrl = await uploadDatabaseToBlob(buffer, tenant);
+    // Upload to Vercel Blob Storage
+    console.log(`[upload] Uploading database to blob storage`);
+    const blobUrl = await uploadDatabaseToBlob(buffer);
     console.log(`[upload] Database uploaded to blob: ${blobUrl}`);
 
     // Check if PostgreSQL is available
@@ -68,13 +57,14 @@ export async function POST(request: Request) {
     
     let migrationResult = null;
     if (postgresAvailable) {
-      console.log(`[upload] PostgreSQL available, starting ${mode} migration for tenant: ${tenant}`);
+      console.log(`[upload] PostgreSQL available, starting ${mode} migration`);
       
       // Get the database path (downloads from blob if needed)
-      tempDbPath = await getDatabasePath(tenant);
+      tempDbPath = await getDatabasePath();
       
       // Migrate to PostgreSQL with specified mode
-      migrationResult = await migrateSQLiteToPostgres(tempDbPath, tenant, mode === 'incremental');
+      // Note: tenantId parameter will be removed in migrate.ts update
+      migrationResult = await migrateSQLiteToPostgres(tempDbPath, 'default', mode === 'incremental');
       
       if (migrationResult.success) {
         console.log(`[upload] Migration completed successfully`);

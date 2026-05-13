@@ -6,19 +6,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    // Get tenant from middleware-injected header
-    const tenant = request.headers.get('x-tenant');
-    
-    if (!tenant) {
-      return NextResponse.json(
-        { error: 'Tenant not found' },
-        { status: 400 }
-      );
-    }
-
     // Check if age category columns exist and have data
     const sampleResults = await query(`
-      SELECT 
+      SELECT
         race_id,
         athlete_id,
         first_name,
@@ -28,35 +18,32 @@ export async function GET(request: Request) {
         age_category,
         age_category_name
       FROM race_results
-      WHERE tenant_id = $1
       LIMIT 20
-    `, [tenant]);
+    `);
 
     // Count results with age categories
     const ageCategoryCount = await query(`
-      SELECT 
+      SELECT
         COUNT(*) as total,
         COUNT(age_category) as with_age_category,
         COUNT(CASE WHEN is_relay = true THEN 1 END) as relays,
         COUNT(CASE WHEN is_relay = false THEN 1 END) as individuals
       FROM race_results
-      WHERE tenant_id = $1
-    `, [tenant]);
+    `);
 
     // Get sample of athletes with birth dates
     const athletesWithBirthDates = await query(`
-      SELECT 
+      SELECT
         athlete_id,
         first_name,
         last_name,
         date_of_birth
       FROM athletes
-      WHERE tenant_id = $1 AND date_of_birth IS NOT NULL
+      WHERE date_of_birth IS NOT NULL
       LIMIT 10
-    `, [tenant]);
+    `);
 
     return NextResponse.json({
-      tenant,
       summary: ageCategoryCount.rows[0],
       sampleResults: sampleResults.rows,
       athletesWithBirthDates: athletesWithBirthDates.rows,

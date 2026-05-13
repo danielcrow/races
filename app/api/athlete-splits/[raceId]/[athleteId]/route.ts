@@ -9,16 +9,6 @@ export async function GET(
   { params }: { params: { raceId: string; athleteId: string } }
 ) {
   try {
-    // Get tenant from middleware-injected header
-    const tenant = request.headers.get('x-tenant');
-    
-    if (!tenant) {
-      return NextResponse.json(
-        { error: 'Tenant not found' },
-        { status: 400 }
-      );
-    }
-
     const raceId = parseInt(params.raceId);
     const athleteId = parseInt(params.athleteId);
     
@@ -33,8 +23,8 @@ export async function GET(
     const raceResult = await query(`
       SELECT race_id as id, race_name as name, race_date as date
       FROM races
-      WHERE tenant_id = $1 AND race_id = $2
-    `, [tenant, raceId]);
+      WHERE race_id = $1
+    `, [raceId]);
 
     if (raceResult.rows.length === 0) {
       return NextResponse.json(
@@ -58,11 +48,10 @@ export async function GET(
         rr.total_seconds,
         rr.splits
       FROM athletes a
-      LEFT JOIN race_results rr ON rr.tenant_id = a.tenant_id 
-        AND rr.race_id = $2 
+      LEFT JOIN race_results rr ON rr.race_id = $1
         AND rr.athlete_id = a.athlete_id
-      WHERE a.tenant_id = $1 AND a.athlete_id = $3
-    `, [tenant, raceId, athleteId]);
+      WHERE a.athlete_id = $2
+    `, [raceId, athleteId]);
 
     if (athleteResult.rows.length === 0) {
       return NextResponse.json(
@@ -85,10 +74,10 @@ export async function GET(
         MIN(split_seconds) as min_seconds,
         MAX(split_seconds) as max_seconds
       FROM splits
-      WHERE tenant_id = $1 AND race_id = $2
+      WHERE race_id = $1
       GROUP BY split_description
       ORDER BY MIN(split_datetime)
-    `, [tenant, raceId]);
+    `, [raceId]);
 
     // Combine athlete splits with statistics
     const splitsWithStats = Object.entries(athleteSplits).map(([splitName, splitData]: [string, any]) => {

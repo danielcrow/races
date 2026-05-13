@@ -9,16 +9,6 @@ export async function GET(
   { params }: { params: { athleteId: string } }
 ) {
   try {
-    // Get tenant from middleware-injected header
-    const tenant = request.headers.get('x-tenant');
-    
-    if (!tenant) {
-      return NextResponse.json(
-        { error: 'Tenant not found' },
-        { status: 400 }
-      );
-    }
-
     const athleteId = parseInt(params.athleteId);
     
     if (isNaN(athleteId)) {
@@ -38,8 +28,8 @@ export async function GET(
         gender,
         full_name
       FROM athletes
-      WHERE tenant_id = $1 AND athlete_id = $2
-    `, [tenant, athleteId]);
+      WHERE athlete_id = $1
+    `, [athleteId]);
 
     if (athleteResult.rows.length === 0) {
       return NextResponse.json(
@@ -60,14 +50,13 @@ export async function GET(
         rr.total_seconds,
         rr.total_time,
         rr.bib_number,
-        (SELECT COUNT(*) FROM race_results WHERE tenant_id = $1 AND race_id = rr.race_id) as total_finishers
+        (SELECT COUNT(*) FROM race_results WHERE race_id = rr.race_id) as total_finishers
       FROM race_results rr
-      JOIN races r ON r.tenant_id = rr.tenant_id AND r.race_id = rr.race_id
-      WHERE rr.tenant_id = $1
-        AND rr.athlete_id = $2
+      JOIN races r ON r.race_id = rr.race_id
+      WHERE rr.athlete_id = $1
         AND LOWER(r.race_name) NOT LIKE '%copy%'
       ORDER BY r.race_date DESC
-    `, [tenant, athleteId]);
+    `, [athleteId]);
 
     const formattedRaces = racesResult.rows.map((race: any) => ({
       raceId: race.race_id,

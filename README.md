@@ -1,15 +1,15 @@
 # Race Timing Platform
 
-Multi-tenant race timing and results management platform with BTF age categories, athlete passcodes, and real-time analytics.
+Single-tenant race timing and results management platform with BTF age categories, athlete passcodes, and real-time analytics.
 
 ## Features
 
 - 🏃 **Race Results** - Public results with filtering by gender, age category, and relay status
 - 🔐 **Athlete Profiles** - Protected with secure passcodes, showing race history and statistics
-- 👥 **Multi-Tenancy** - Subdomain-based tenant isolation
 - 📊 **BTF Age Categories** - British Triathlon Federation standard categories
 - 📈 **Analytics** - Vercel Analytics and Speed Insights integrated
-- 🎯 **Admin Dashboard** - Database upload, passcode management, tenant management
+- 🎯 **Admin Dashboard** - Database upload, passcode management
+- 🚀 **Simple Deployment** - Single-tenant architecture for easy setup and management
 
 ## Tech Stack
 
@@ -83,8 +83,7 @@ app/
 lib/
 ├── db/               # Database utilities
 ├── btf-age-categories.ts
-├── passcode.ts
-└── tenant.ts
+└── passcode.ts
 ```
 
 ## Key Features
@@ -101,10 +100,10 @@ lib/
 - Admin management at `/admin/passcodes`
 - Copy, regenerate, export to CSV
 
-### Multi-Tenancy
-- Subdomain-based (e.g., `club1.racetiming.app`)
-- Automatic tenant detection
-- Data isolation by `tenant_id`
+### Multiple Instances
+- Each deployment is a separate instance for a single organization
+- To run multiple organizations, deploy separate instances
+- See [VERCEL_MULTI_TENANT_GUIDE.md](./VERCEL_MULTI_TENANT_GUIDE.md) for deploying multiple instances
 
 ### Analytics
 - Vercel Analytics for user tracking

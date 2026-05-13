@@ -22,18 +22,13 @@ export const authConfig: NextAuthConfig = {
       return true; // Allow access to public pages
     },
     async redirect({ url, baseUrl }) {
-      // After successful login, redirect to tenant subdomain
-      // This callback is called after signIn
+      // After successful login, redirect to the requested URL or admin
       console.log('[auth] Redirect callback - url:', url, 'baseUrl:', baseUrl);
-      
-      // If redirecting to /admin, we'll handle tenant redirect in the signin page
-      // Just return the URL as-is for now
       return url.startsWith('/') ? `${baseUrl}${url}` : url;
     },
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.tenantId = (user as any).tenantId;
         token.role = (user as any).role;
       }
       return token;
@@ -41,7 +36,6 @@ export const authConfig: NextAuthConfig = {
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string;
-        (session.user as any).tenantId = token.tenantId;
         (session.user as any).role = token.role;
       }
       return session;
@@ -85,7 +79,6 @@ export const authConfig: NextAuthConfig = {
           id: user.id,
           email: user.email,
           name: user.name,
-          tenantId: user.tenantId,
           role: user.role
         };
       }

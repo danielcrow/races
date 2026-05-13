@@ -9,16 +9,6 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Get tenant from middleware-injected header
-    const tenant = request.headers.get('x-tenant');
-    
-    if (!tenant) {
-      return NextResponse.json(
-        { error: 'Tenant not found' },
-        { status: 400 }
-      );
-    }
-
     const raceId = parseInt(params.id);
     
     if (isNaN(raceId)) {
@@ -42,8 +32,8 @@ export async function GET(
     const raceResult = await query(`
       SELECT race_id as id, race_name as name, race_date as date
       FROM races
-      WHERE tenant_id = $1 AND race_id = $2
-    `, [tenant, raceId]);
+      WHERE race_id = $1
+    `, [raceId]);
 
     if (raceResult.rows.length === 0) {
       return NextResponse.json(
@@ -55,9 +45,9 @@ export async function GET(
     const raceInfo = raceResult.rows[0];
 
     // Build WHERE clause based on filters
-    const whereClauses = ['tenant_id = $1', 'race_id = $2'];
-    const queryParams: any[] = [tenant, raceId];
-    let paramIndex = 3;
+    const whereClauses = ['race_id = $1'];
+    const queryParams: any[] = [raceId];
+    let paramIndex = 2;
     
     if (genderFilter) {
       whereClauses.push(`gender = $${paramIndex}`);
@@ -110,8 +100,8 @@ export async function GET(
         is_relay,
         total_seconds
       FROM race_results
-      WHERE tenant_id = $1 AND race_id = $2
-    `, [tenant, raceId]);
+      WHERE race_id = $1
+    `, [raceId]);
     
     const allResults = allResultsQuery.rows;
 

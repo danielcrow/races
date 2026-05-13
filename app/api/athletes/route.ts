@@ -6,18 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    // Get tenant from middleware-injected header
-    const tenant = request.headers.get('x-tenant');
-    
-    console.log('[athletes] Fetching athletes for tenant:', tenant);
-    
-    if (!tenant) {
-      console.error('[athletes] No tenant found in request headers');
-      return NextResponse.json(
-        { error: 'Tenant not found' },
-        { status: 400 }
-      );
-    }
+    console.log('[athletes] Fetching athletes');
 
     // Check if PostgreSQL is available
     const postgresAvailable = await isPostgresAvailable();
@@ -47,11 +36,10 @@ export async function GET(request: Request) {
         s.first_race_date as "firstRace",
         s.last_race_date as "lastRace"
       FROM athletes a
-      LEFT JOIN athlete_stats s ON s.tenant_id = a.tenant_id AND s.athlete_id = a.athlete_id
-      WHERE a.tenant_id = $1
-        AND COALESCE(s.total_races, 0) > 0
+      LEFT JOIN athlete_stats s ON s.athlete_id = a.athlete_id
+      WHERE COALESCE(s.total_races, 0) > 0
       ORDER BY a.last_name ASC, a.first_name ASC
-    `, [tenant]);
+    `);
 
     const athletes = result.rows;
 
